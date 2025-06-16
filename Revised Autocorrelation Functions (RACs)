@@ -1,0 +1,113 @@
+Think of RACs as ways to encode a graph-like material into features.
+They measure how atomic properties correlate across the structure, at specific distances (bonds).
+
+🔍 How they work:
+  You take atomic properties (like electronegativity, atomic radius).
+  You look at pairs of atoms separated by a certain number of bonds (1-bond, 2-bond, etc.).
+  Then compute the product or difference of their properties.
+  These are summed across the whole structure.
+
+#!pip install rdkit-pypi pymatgen networkx --quiet
+'''! is a special symbol in Google Colab to run shell commands, like installing Python libraries.
+pip install ... installs the libraries you'll need:
+rdkit-pypi: lets you create molecules from SMILES and manipulate them.
+pymatgen: gives you access to chemical properties (like electronegativity).
+numpy: used internally for numerical computation (specific version avoids errors).
+networkx: used for creating and analyzing graphs (atoms = nodes, bonds = edges).
+--quiet hides installation messages.
+'''
+
+from rdkit import Chem
+from pymatgen.core.periodic_table import Element
+import networkx as nx
+# from ... import ... is a Python import statement – it loads the Element class.
+'''
+Chem: from rdkit, used to read molecule structures (like SMILES).
+Element: from pymatgen, gives you atomic data.
+nx: short for networkx, allows us to model molecules as graphs.
+'''
+
+# Define your molecule using SMILES notation
+smiles = "ClC(Cl)Cl"  # chloroform
+mol = Chem.AddHs(Chem.MolFromSmiles(smiles)) # For water you have to add hydrogens
+# parses the SMILES into an RDKit molecule object.
+
+# Build the molecule graph: nodes = atoms, edges = bonds
+G = nx.Graph()
+#Creates an empty undirected graph G. In chemistry, 
+#bonds don’t have direction → undirected graph.
+
+for atom in mol.GetAtoms():
+    G.add_node(atom.GetIdx(), symbol=atom.GetSymbol())
+'''
+Loops through every atom in the molecule.
+  atom.GetIdx() gets the index (a number) of the atom.
+  atom.GetSymbol() returns the atom’s chemical symbol (e.g., "C" for carbon).
+  G.add_node(...) adds the atom to the graph as a node.
+'''
+
+for bond in mol.GetBonds():
+    i = bond.GetBeginAtomIdx()
+    j = bond.GetEndAtomIdx()
+    G.add_edge(i, j)
+
+'''
+  Loops over all bonds.
+  Gets the two atoms (by index) connected by each bond.
+  Adds an edge between them in the graph.
+'''
+
+# Print atoms and their neighbors
+for node in G.nodes(data=True):
+    print(f"Atom index: {node[0]}, Element: {node[1]['symbol']}, Neighbors: {list(G.neighbors(node[0]))}")
+
+'''
+Loops through all atoms (nodes).
+Prints:
+The atom index
+Its element symbol
+A list of neighboring atoms (bonds)
+'''
+
+# Get electronegativity of an atom
+def get_en(atom_idx):
+    symbol = mol.GetAtomWithIdx(atom_idx).GetSymbol()
+    try:
+        return Element(symbol).X  # X = Pauling electronegativity
+    except:
+        return 0.0
+
+# Calculate product-based RAC for a bond distance d
+def rac_sum_product(distance):
+    total = 0
+    for i in G.nodes:
+        for j in G.nodes:
+            if i < j and nx.shortest_path_length(G, i, j) == distance:
+                total += get_en(i) * get_en(j)
+    return total
+
+'''
+G.nodes: gets all atom indices
+i < j: avoids double-counting (same pair twice)
+nx.shortest_path_length(G, i, j): finds bond distance between atoms i and j
+If the distance equals d, multiply EN(i) × EN(j) and add to total
+🧠 So:
+→ For all atom pairs d bonds apart, multiply their electronegativities and sum.
+'''
+
+# Calculate difference-based RAC
+def rac_sum_difference(distance):
+    total = 0
+    for i in G.nodes:
+        for j in G.nodes:
+            if i < j and nx.shortest_path_length(G, i, j) == distance:
+                total += abs(get_en(i) - get_en(j))
+    return total
+
+d_values = [1, 2]  # bond distances to analyze
+
+for d in d_values:
+    prod = rac_sum_product(d)
+    diff = rac_sum_difference(d)
+    print(f"RAC product (d={d}): {prod:.3f}")
+    print(f"RAC difference (d={d}): {diff:.3f}")
